@@ -1,0 +1,11 @@
+name: task-hud
+version: "1.0.0"
+manifest_version: 2
+description: Floating always-on-top HUD that mirrors live Hermes task state (current task, step, progress bar) and flashes on completion until Hermes is reopened.
+author: Jerdam Chukwu
+provides_hooks:
+  - pre_llm_call
+  - pre_tool_call
+  - on_session_end
+python_dependencies:
+  - "pywebview>=4.0"

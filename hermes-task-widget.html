@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>Hermes Task Monitor</title>
+<style>
+  :root {
+    --bg: #0a0b0e;
+    --panel: #13151a;
+    --border: #1e2028;
+    --text: #c8ccd4;
+    --muted: #5a5f6b;
+    --accent: #5b8def;
+    --accent-glow: rgba(91,141,239,0.35);
+    --done: #34d399;
+    --done-glow: rgba(52,211,153,0.5);
+    --warning: #f59e0b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    min-width: 0;
+    min-height: 0;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-app-region: drag;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .widget {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    width: 340px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .widget::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+    opacity: 0;
+  }
+
+  /* ── Idle state ── */
+  .widget.idle {
+    border-color: var(--border);
+  }
+  .widget.idle .status-bar {
+    background: transparent;
+  }
+
+  /* ── Running state ── */
+  .widget.running {
+    border-color: var(--accent);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 20px var(--accent-glow);
+  }
+
+  /* ── Completed state ── */
+  .widget.completed {
+    border-color: var(--done);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 30px var(--done-glow);
+    animation: flash-glow 1.2s ease-in-out infinite;
+  }
+
+  @keyframes flash-glow {
+    0%, 100% { box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 20px var(--done-glow); }
+    50%      { box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 45px var(--done-glow), 0 0 70px rgba(52,211,153,0.25); }
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+    flex-shrink: 0;
+  }
+
+  .widget.running .dot {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  .widget.completed .dot {
+    background: var(--done);
+    box-shadow: 0 0 10px var(--done-glow);
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
+
+  .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.3s ease;
+  }
+
+  .widget.running .label { color: var(--accent); }
+  .widget.completed .label { color: var(--done); }
+
+  /* ── Task name ── */
+  .task-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 20px;
+  }
+
+  .task-name.empty {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 13px;
+  }
+
+  /* ── Step ── */
+  .step {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    min-height: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step.empty { color: var(--muted); opacity: 0.6; }
+
+  /* ── Progress bar ── */
+  .progress-track {
+    width: 100%;
+    height: 6px;
+    background: #1c1e24;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), #7aa2f7);
+    transition: width 0.4s ease, background 0.4s ease;
+    position: relative;
+  }
+
+  .widget.running .progress-fill {
+    background: linear-gradient(90deg, var(--accent), #7aa2f7);
+  }
+
+  .widget.completed .progress-fill {
+    width: 100% !important;
+    background: linear-gradient(90deg, var(--done), #6ee7b7);
+    animation: fill-pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes fill-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.75; }
+  }
+
+  /* ── Progress text ── */
+  .progress-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .progress-text .percent {
+    color: var(--text);
+    font-weight: 500;
+    transition: color 0.3s ease;
+  }
+
+  .widget.completed .progress-text .percent {
+    color: var(--done);
+  }
+
+  /* ── Status message (completed) ── */
+  .done-message {
+    text-align: center;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--done);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+
+  .widget.completed .done-message {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .footer .hint {
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* ── Error state ── */
+  .widget.error .task-name {
+    color: var(--warning);
+  }
+  .widget.error .dot {
+    background: var(--warning);
+    box-shadow: 0 0 8px rgba(245,158,11,0.4);
+  }
+</style>
+</head>
+<body>
+
+<div class="widget idle" id="widget">
+  <div class="header">
+    <span class="dot" id="dot"></span>
+    <span class="label" id="statusLabel">Idle</span>
+  </div>
+
+  <div class="task-name empty" id="taskName">No task running</div>
+
+  <div class="step empty" id="step">—</div>
+
+  <div class="progress-track">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <div class="progress-text">
+    <span id="progressLabel">Waiting…</span>
+    <span class="percent" id="percentText">—</span>
+  </div>
+
+  <div class="done-message" id="doneMessage">✓ Task complete — bring Hermes to foreground to clear</div>
+
+  <div class="footer">
+    <span id="lastUpdate">—</span>
+    <span class="hint">polls task_state.json</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── Configuration ──
+  const CONFIG = {
+    // Path to the JSON file Hermes writes. Adjust to your setup:
+    //   - Option A (local server): "http://localhost:8080/task_state.json"
+    //   - Option B (File System Access API, see init below): a file handle
+    stateUrl: "task_state.json",   // default; overridable below
+    pollMs: 2500,                  // how often to re-read state
+    maxAgeMs: 30000,              // consider state stale if older than this
+  };
+
+  // ── DOM refs ──
+  const widget    = document.getElementById("widget");
+  const dot       = document.getElementById("dot");
+  const label     = document.getElementById("statusLabel");
+  const taskName  = document.getElementById("taskName");
+  const step      = document.getElementById("step");
+  const fill      = document.getElementById("progressFill");
+  const pLabel    = document.getElementById("progressLabel");
+  const percent   = document.getElementById("percentText");
+  const doneMsg   = document.getElementById("doneMessage");
+  const lastUpd   = document.getElementById("lastUpdate");
+
+  // ── State ──
+  let currentStatus = "idle";   // "idle" | "running" | "completed" | "error"
+  let fileHandle    = null;     // File System Access API handle (Option B)
+  let pollTimer     = null;
+  let flashTimer    = null;
+
+  // ── Helpers ──
+  function fmtTime(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function setStatus(status, data) {
+    // Remove all state classes
+    widget.classList.remove("idle", "running", "completed", "error");
+
+    if (status === "idle") {
+      widget.classList.add("idle");
+      label.textContent = "Idle";
+      taskName.textContent = "No task running";
+      taskName.classList.add("empty");
+      step.textContent = "—";
+      step.classList.add("empty");
+      fill.style.width = "0%";
+      pLabel.textContent = "Waiting…";
+      percent.textContent = "—";
+      doneMsg.style.opacity = "0";
+      currentStatus = "idle";
+    } else if (status === "running") {
+      widget.classList.add("running");
+      label.textContent = "Running";
+      taskName.textContent = data.task || "Task";
+      taskName.classList.remove("empty");
+      step.textContent = data.step || "—";
+      step.classList.remove("empty");
+      const pct = Math.min(100, Math.max(0, data.progress || 0));
+      fill.style.width = pct + "%";
+      pLabel.textContent = data.step || "In progress…";
+      percent.textContent = pct + "%";
+      doneMsg.style.opacity = "0";
+      currentStatus = "running";
+    } else if (status === "completed") {
+      widget.classList.add("completed");
+      label.textContent = "Done";
+      taskName.textContent = data.task || "Task";
+      taskName.classList.remove("empty");
+      step.textContent = data.step || "Complete";
+      step.classList.remove("empty");
+      fill.style.width = "100%";
+      pLabel.textContent = "Complete";
+      percent.textContent = "100%";
+      doneMsg.style.opacity = "1";
+      currentStatus = "completed";
+      startFlash();
+    } else if (status === "error") {
+      widget.classList.add("error");
+      label.textContent = "Error";
+      taskName.textContent = data.task || "Task";
+      taskName.classList.remove("empty");
+      step.textContent = data.error || "Failed to read state";
+      step.classList.remove("empty");
+      fill.style.width = "0%";
+      pLabel.textContent = "Error";
+      percent.textContent = "—";
+      doneMsg.style.opacity = "0";
+      currentStatus = "error";
+    }
+
+    lastUpd.textContent = fmtTime((data && data.updated) || Date.now());
+  }
+
+  // ── Flash management ──
+  function startFlash() {
+    // CSS animation on .widget.completed handles the visual flashing.
+    // The flash persists via the CSS class until Hermes signals a new
+    // state (idle / running) via the JSON file — readState() will
+    // call stopFlash() when it sees status !== "completed".
+  }
+
+  function stopFlash() {
+    widget.classList.remove("completed");
+    widget.classList.add("idle");
+    label.textContent = "Idle";
+    doneMsg.style.opacity = "0";
+    currentStatus = "idle";
+  }
+
+  // ── Read state ──
+  async function readState() {
+    try {
+      let raw;
+
+      if (fileHandle) {
+        // Option B: File System Access API
+        const file = await fileHandle.getFile();
+        raw = await file.text();
+      } else {
+        // Option A: HTTP fetch or file.href
+        const resp = await fetch(CONFIG.stateUrl, { cache: "no-store" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        raw = await resp.text();
+      }
+
+      const data = JSON.parse(raw);
+
+      // Detect Hermes-active signal: if the file contains hermes_active: true,
+      // or status is explicitly "idle" with no task, stop any flash.
+      if (data.hermes_active === true || (data.status === "idle" && !data.task)) {
+        if (currentStatus === "completed") {
+          stopFlash();
+        }
+        setStatus("idle", {});
+        return;
+      }
+
+      // Normalize
+      if (data.status === "completed" || data.progress >= 100) {
+        setStatus("completed", data);
+      } else if (data.status === "running" || data.status === "in_progress") {
+        setStatus("running", data);
+      } else if (data.status === "error") {
+        setStatus("error", data);
+      } else {
+        // Unknown or idle-ish: treat as idle unless there's a task
+        if (data.task) {
+          setStatus("running", data);
+        } else {
+          setStatus("idle", {});
+        }
+      }
+    } catch (err) {
+      // File not found, parse error, or fetch failure.
+      // Most likely causes: Hermes is mid-write (partial JSON race), or
+      // the file doesn't exist yet (first-run / Hermes not active).
+      // Keep the last known state — don't flap to error for transient issues.
+    }
+  }
+
+  // ── Poll loop ──
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(readState, CONFIG.pollMs);
+    // Immediate first read
+    readState();
+  }
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  // ── Init ──
+  // The launcher (hermes_hud.py) serves this page over http://127.0.0.1,
+  // so a plain relative fetch of task_state.json is all we need.
+  function init() { startPolling(); }
+
+  // ── Start ──
+  init();
+})();
+</script>
+</body>
+</html>

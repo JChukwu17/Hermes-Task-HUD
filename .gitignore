@@ -1,0 +1,14 @@
+# Local runtime state produced by the plugin at runtime (never commit)
+task_state.json
+hud/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
